@@ -1,0 +1,6 @@
+{
+  "name": "Deadline Guardian AI",
+  "description": "An autonomous multi-agent AI Chief of Staff that plans, prioritizes, predicts risk, re-schedules, and negotiates deadline extensions.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
