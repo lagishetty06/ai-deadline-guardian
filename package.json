@@ -1,7 +1,22 @@
 {
-  "name": "react-example",
+  "name": "deadline-guardian-ai",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "description": "Deadline Guardian AI: Autonomous Multi-Agent Chief of Staff that plans, prioritizes, predicts risk, re-schedules, and negotiates deadline extensions using Google Gemini.",
+  "keywords": [
+    "ai-chief-of-staff",
+    "deadline-guardian",
+    "agentic-scheduler",
+    "google-gemini",
+    "hackathon",
+    "google-cloud",
+    "react",
+    "typescript"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/google-ai-studio/deadline-guardian-ai.git"
+  },
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",

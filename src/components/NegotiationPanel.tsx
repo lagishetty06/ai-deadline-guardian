@@ -12,9 +12,30 @@ export default function NegotiationPanel({ negotiation, deadlineTitle }: Negotia
   const [tone, setTone] = useState<'formal' | 'semi-formal'>(negotiation.tone);
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(negotiation.emailBody);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(negotiation.emailBody);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } else {
+        // Fallback for non-supported clipboard environments (e.g. sandboxed iframe)
+        const textarea = document.createElement('textarea');
+        textarea.value = negotiation.emailBody;
+        // Make it invisible
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }
+    } catch (err) {
+      console.error('Failed to copy text: ', err);
+      // Ultimate fallback alert-less user feedback
+      setCopied(false);
+    }
   };
 
   // Gmail direct integration link

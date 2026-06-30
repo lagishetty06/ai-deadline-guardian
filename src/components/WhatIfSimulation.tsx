@@ -15,6 +15,13 @@ export default function WhatIfSimulation({ baselineRisk, onSimulationChange }: W
   const [simulatedRisk, setSimulatedRisk] = useState(baselineRisk);
   const [simulatedLevel, setSimulatedLevel] = useState<RiskLevelType>('safe');
 
+  // Reset sliders when a different baseline risk is loaded (active deadline changed)
+  useEffect(() => {
+    setProcrastination(0);
+    setHoursReduction(0);
+    setDelayDays(0);
+  }, [baselineRisk]);
+
   // Recalculate simulated risk based on inputs
   useEffect(() => {
     // Standard simulation scoring model
@@ -93,10 +100,11 @@ export default function WhatIfSimulation({ baselineRisk, onSimulationChange }: W
       <div className="space-y-4">
         <div className="space-y-2">
           <div className="flex justify-between items-center">
-            <label className="text-xs text-slate-300 font-medium">Procrastination Factor</label>
+            <label htmlFor="sim-procrastination" className="text-xs text-slate-300 font-medium">Procrastination Factor</label>
             <span className="text-xs font-mono font-medium text-slate-400">{procrastination}%</span>
           </div>
           <input
+            id="sim-procrastination"
             type="range"
             min="0"
             max="100"
@@ -109,10 +117,11 @@ export default function WhatIfSimulation({ baselineRisk, onSimulationChange }: W
 
         <div className="space-y-2">
           <div className="flex justify-between items-center">
-            <label className="text-xs text-slate-300 font-medium">Study/Work Hours Slashed</label>
+            <label htmlFor="sim-hours-reduction" className="text-xs text-slate-300 font-medium">Study/Work Hours Slashed</label>
             <span className="text-xs font-mono font-medium text-slate-400">-{hoursReduction} hrs/day</span>
           </div>
           <input
+            id="sim-hours-reduction"
             type="range"
             min="0"
             max="5"
@@ -126,10 +135,11 @@ export default function WhatIfSimulation({ baselineRisk, onSimulationChange }: W
 
         <div className="space-y-2">
           <div className="flex justify-between items-center">
-            <label className="text-xs text-slate-300 font-medium">Schedule Entry Delay</label>
+            <label htmlFor="sim-delay-days" className="text-xs text-slate-300 font-medium">Schedule Entry Delay</label>
             <span className="text-xs font-mono font-medium text-slate-400">+{delayDays} days</span>
           </div>
           <input
+            id="sim-delay-days"
             type="range"
             min="0"
             max="7"

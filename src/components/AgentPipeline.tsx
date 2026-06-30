@@ -36,56 +36,50 @@ const AGENTS: Agent[] = [
 
 interface AgentPipelineProps {
   isRunning: boolean;
+  currentStep: number;
   onComplete?: () => void;
 }
 
-export default function AgentPipeline({ isRunning, onComplete }: AgentPipelineProps) {
-  const [currentStep, setCurrentStep] = useState<number>(0); // 0 means idle/not started
+export default function AgentPipeline({ isRunning, currentStep, onComplete }: AgentPipelineProps) {
   const [logs, setLogs] = useState<string[]>([]);
 
-  // Simulation of pipeline logs and steps
+  // Synchronize logs and step progress with the parent's currentStep state
   useEffect(() => {
-    if (!isRunning) {
-      setCurrentStep(0);
+    if (currentStep === 0) {
       setLogs([]);
       return;
     }
 
-    setCurrentStep(1);
-    setLogs(["Initializing Deadline Guardian AI Multi-Agent Core...", "Planner Agent online. Parsing targets and constraints..."]);
-
-    const timers: NodeJS.Timeout[] = [];
-
-    const triggerStep = (stepNum: number, delay: number, nextLog: string) => {
-      const t = setTimeout(() => {
-        setCurrentStep(stepNum);
-        setLogs(prev => [nextLog, ...prev].slice(0, 5));
-        
-        if (stepNum === 9) {
-          const finishTimer = setTimeout(() => {
-            setCurrentStep(10); // complete
-            setLogs(prev => ["Multi-Agent Pipeline Execution Complete! Dashboard updated.", ...prev].slice(0, 5));
-            if (onComplete) onComplete();
-          }, 800);
-          timers.push(finishTimer);
-        }
-      }, delay);
-      timers.push(t);
+    const logMessages: Record<number, string> = {
+      1: "Planner Agent online. Parsing targets and constraints...",
+      2: "Planner finished. Priority Agent re-ranking tasks based on Urgency-Importance formula...",
+      3: "Priority set. Risk Agent assessing procrastination penalty and predicting deadline fail rates...",
+      4: "Risk quantified. Calendar Agent blocking times and checking for schedule overlaps...",
+      5: "Time-blocking clear. Daily Coach formulating customized focus blocks...",
+      6: "Coaching plan complete. Recovery Agent compiling emergency reschedule backups...",
+      7: "Recovery analyzed. Negotiation Agent drafting extension requests and candidate deferred tasks...",
+      8: "Extension package prepared. Learning Agent extracting concepts, quiz topics, and study guides...",
+      9: "Materials cached. Reflection Agent initializing retrospective review listeners...",
+      10: "Multi-Agent Pipeline Execution Complete! Dashboard updated."
     };
 
-    triggerStep(2, 1000, "Planner finished. Priority Agent re-ranking tasks based on Urgency-Importance formula...");
-    triggerStep(3, 2000, "Priority set. Risk Agent assessing procrastination penalty and predicting deadline fail rates...");
-    triggerStep(4, 3000, "Risk quantified. Calendar Agent blocking times and checking for schedule overlaps...");
-    triggerStep(5, 4000, "Time-blocking clear. Daily Coach formulating customized focus blocks...");
-    triggerStep(6, 5000, "Coaching plan complete. Recovery Agent compiling emergency reschedule backups...");
-    triggerStep(7, 6000, "Recovery analyzed. Negotiation Agent drafting extension requests and candidate deferred tasks...");
-    triggerStep(8, 7000, "Extension package prepared. Learning Agent extracting concepts, quiz topics, and study guides...");
-    triggerStep(9, 8000, "Materials cached. Reflection Agent initializing retrospective review listeners...");
+    if (currentStep === 1) {
+      setLogs(["Initializing Deadline Guardian AI Multi-Agent Core...", logMessages[1]]);
+    } else {
+      const msg = logMessages[currentStep];
+      if (msg) {
+        setLogs(prev => {
+          // Prevent duplicates
+          if (prev.includes(msg)) return prev;
+          return [msg, ...prev].slice(0, 5);
+        });
+      }
+    }
 
-    return () => {
-      timers.forEach(clearTimeout);
-    };
-  }, [isRunning]);
+    if (currentStep === 10 && onComplete) {
+      onComplete();
+    }
+  }, [currentStep, onComplete]);
 
   return (
     <div id="agent-pipeline-container" className="bg-[#0e0e1b] border border-slate-800/80 rounded-2xl p-6 shadow-2xl flex flex-col h-full justify-between">

@@ -89,6 +89,7 @@ export default function VoiceInput({ onTranscriptChange, placeholder = 'Type or 
             : 'bg-[#15152a] border-slate-800 hover:border-slate-700 text-slate-400 hover:text-white'
         }`}
         title={isListening ? 'Stop Listening' : 'Dictate Goal'}
+        aria-label={isListening ? 'Stop Listening' : 'Dictate Goal'}
       >
         {isListening ? (
           <div className="flex items-center gap-1">

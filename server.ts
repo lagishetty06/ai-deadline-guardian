@@ -354,7 +354,7 @@ app.post("/api/analyze-goal", async (req, res) => {
       };
 
       const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
+        model: "gemini-2.5-flash",
         contents: prompt,
         config: {
           responseMimeType: "application/json",
@@ -434,7 +434,7 @@ app.post("/api/parse-syllabus", async (req, res) => {
       };
 
       const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
+        model: "gemini-2.5-flash",
         contents: prompt,
         config: {
           responseMimeType: "application/json",
@@ -537,7 +537,7 @@ app.post("/api/generate-learning", async (req, res) => {
       };
 
       const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
+        model: "gemini-2.5-flash",
         contents: prompt,
         config: {
           responseMimeType: "application/json",
@@ -564,6 +564,14 @@ app.post("/api/generate-learning", async (req, res) => {
   console.info("Active Fallback Data Engine triggered for /api/generate-learning");
   res.json(fallbackGenerateLearning(subtaskTitle));
 });;
+
+// Serve SEO files
+app.get("/robots.txt", (req, res) => {
+  res.sendFile(path.join(process.cwd(), "robots.txt"));
+});
+app.get("/sitemap.xml", (req, res) => {
+  res.sendFile(path.join(process.cwd(), "sitemap.xml"));
+});
 
 // Serve Vite SPA
 async function startServer() {

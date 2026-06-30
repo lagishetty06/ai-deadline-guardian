@@ -89,7 +89,9 @@ export default function SyllabusParser({ onImportDeadlines }: SyllabusParserProp
 
       {parsedItems.length === 0 ? (
         <div className="space-y-4">
+          <label htmlFor="syllabus-textarea" className="sr-only">Paste syllabus or timeline details</label>
           <textarea
+            id="syllabus-textarea"
             className="w-full h-40 bg-black/40 border border-slate-800 rounded-xl p-3 text-xs text-slate-300 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all font-sans resize-none"
             placeholder="Example:
 CIS 312 Database Management Systems

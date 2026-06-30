@@ -48,6 +48,7 @@ export interface Deadline {
   riskFactors: string[];
   recommendedAction: string;
   negotiation: Negotiation | null;
+  dailyCoach?: DailyCoachPlan | null;
 }
 
 export interface LearningMaterial {
