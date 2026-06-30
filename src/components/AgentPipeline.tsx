@@ -30,7 +30,7 @@ const AGENTS: Agent[] = [
   { id: 5, name: "Daily Coach Agent", role: "Energy-Aware Coaching", description: "Formulates customized high/low energy focus plans", icon: <Smile className="w-5 h-5 text-amber-400" /> },
   { id: 6, name: "Recovery Agent", role: "Overload Rescheduler", description: "Ruthlessly trims and drops tasks to save weeks", icon: <LifeBuoy className="w-5 h-5 text-cyan-400" /> },
   { id: 7, name: "Negotiation Agent", role: "Professional Communicator", description: "Drafts perfect extension requests with defer proposals", icon: <Scale className="w-5 h-5 text-sky-400" /> },
-  { id: 8, name: "Learning Agent", role: "Exam & Project Prep Tutor", description: "Compiles study notes, pitfalls, and custom mock quizes", icon: <BookOpen className="w-5 h-5 text-teal-400" /> },
+  { id: 8, name: "Learning Agent", role: "Exam & Project Prep Tutor", description: "Compiles study notes, pitfalls, and custom mock quizzes on-demand", icon: <BookOpen className="w-5 h-5 text-teal-400" /> },
   { id: 9, name: "Reflection Agent", role: "Retrospective Log Reviewer", description: "Analyzes daily output to adapt tomorrow's pace", icon: <History className="w-5 h-5 text-fuchsia-400" /> }
 ];
 
@@ -58,7 +58,7 @@ export default function AgentPipeline({ isRunning, currentStep, onComplete }: Ag
       5: "Time-blocking clear. Daily Coach formulating customized focus blocks...",
       6: "Coaching plan complete. Recovery Agent compiling emergency reschedule backups...",
       7: "Recovery analyzed. Negotiation Agent drafting extension requests and candidate deferred tasks...",
-      8: "Extension package prepared. Learning Agent extracting concepts, quiz topics, and study guides...",
+      8: "Extension package prepared. Learning Agent armed on-demand, ready to extract custom concepts and quiz topics...",
       9: "Materials cached. Reflection Agent initializing retrospective review listeners...",
       10: "Multi-Agent Pipeline Execution Complete! Dashboard updated."
     };

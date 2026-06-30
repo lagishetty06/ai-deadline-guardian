@@ -7,9 +7,49 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json({ limit: "10mb" }));
+
+// In-memory Rate Limiting Token Bucket Middleware (max 10 reqs/minute per IP)
+const rateLimitMap = new Map<string, { tokens: number; lastRefill: number }>();
+const RATE_LIMIT_TOKENS = 10;
+const RATE_LIMIT_WINDOW_MS = 60 * 1000;
+
+function rateLimiter(req: any, res: any, next: any) {
+  const ip = (req.headers["x-forwarded-for"] as string) || req.socket.remoteAddress || "unknown";
+  const now = Date.now();
+
+  if (!rateLimitMap.has(ip)) {
+    rateLimitMap.set(ip, { tokens: RATE_LIMIT_TOKENS - 1, lastRefill: now });
+    next();
+    return;
+  }
+
+  const record = rateLimitMap.get(ip)!;
+  const timePassed = now - record.lastRefill;
+
+  if (timePassed >= RATE_LIMIT_WINDOW_MS) {
+    record.tokens = RATE_LIMIT_TOKENS;
+    record.lastRefill = now;
+  } else {
+    const refillTokens = Math.floor((timePassed / RATE_LIMIT_WINDOW_MS) * RATE_LIMIT_TOKENS);
+    if (refillTokens > 0) {
+      record.tokens = Math.min(RATE_LIMIT_TOKENS, record.tokens + refillTokens);
+      record.lastRefill = now;
+    }
+  }
+
+  if (record.tokens <= 0) {
+    res.status(429).json({ error: "Too many requests. Please wait a minute before retrying." });
+    return;
+  }
+
+  record.tokens -= 1;
+  next();
+}
+
+app.use("/api/*", rateLimiter);
 
 // Lazy initialization of Gemini client
 let aiClient: GoogleGenAI | null = null;
@@ -249,6 +289,16 @@ app.post("/api/analyze-goal", async (req, res) => {
     return;
   }
 
+  if (title && title.length > 5000) {
+    res.status(400).json({ error: "Input 'title' is too long (maximum 5000 characters)" });
+    return;
+  }
+
+  if (description && description.length > 5000) {
+    res.status(400).json({ error: "Input 'description' is too long (maximum 5000 characters)" });
+    return;
+  }
+
   // 2-step retry mechanism for API resilience
   let retries = 2;
   while (retries > 0) {
@@ -370,7 +420,12 @@ app.post("/api/analyze-goal", async (req, res) => {
       res.json(JSON.parse(text.trim()));
       return;
     } catch (error: any) {
-      console.warn(`Upstream Gemini attempt failed. Retries remaining: ${retries - 1}`, error);
+      const errorMsg = error.message || String(error);
+      if (errorMsg.includes("API key not valid") || errorMsg.includes("API_KEY_INVALID") || errorMsg.includes("INVALID_ARGUMENT") || errorMsg.includes("key is missing") || errorMsg.includes("required") || errorMsg.includes("variable is required")) {
+        console.info("[Gemini] API key is invalid or placeholder. Gracefully switching to fallback engine immediately.");
+        break;
+      }
+      console.info(`[Gemini] Model attempt failed. Retries remaining: ${retries - 1}. Status: ${errorMsg.substring(0, 100)}`);
       retries--;
       if (retries > 0) {
         await new Promise((resolve) => setTimeout(resolve, 800)); // sleep before retrying
@@ -389,6 +444,11 @@ app.post("/api/parse-syllabus", async (req, res) => {
   
   if (!syllabusText) {
     res.status(400).json({ error: "No syllabus text provided" });
+    return;
+  }
+
+  if (syllabusText && syllabusText.length > 5000) {
+    res.status(400).json({ error: "Input 'syllabusText' is too long (maximum 5000 characters)" });
     return;
   }
 
@@ -450,7 +510,12 @@ app.post("/api/parse-syllabus", async (req, res) => {
       res.json(JSON.parse(text.trim()));
       return;
     } catch (error: any) {
-      console.warn(`Upstream Gemini attempt failed for parse-syllabus. Retries remaining: ${retries - 1}`, error);
+      const errorMsg = error.message || String(error);
+      if (errorMsg.includes("API key not valid") || errorMsg.includes("API_KEY_INVALID") || errorMsg.includes("INVALID_ARGUMENT") || errorMsg.includes("key is missing") || errorMsg.includes("required") || errorMsg.includes("variable is required")) {
+        console.info("[Gemini] API key is invalid or placeholder. Gracefully switching to fallback engine immediately for parse-syllabus.");
+        break;
+      }
+      console.info(`[Gemini] Model attempt failed for parse-syllabus. Retries remaining: ${retries - 1}. Status: ${errorMsg.substring(0, 100)}`);
       retries--;
       if (retries > 0) {
         await new Promise((resolve) => setTimeout(resolve, 800));
@@ -468,6 +533,21 @@ app.post("/api/generate-learning", async (req, res) => {
 
   if (!subtaskTitle) {
     res.status(400).json({ error: "Missing subtaskTitle" });
+    return;
+  }
+
+  if (subtaskTitle && subtaskTitle.length > 5000) {
+    res.status(400).json({ error: "Input 'subtaskTitle' is too long (maximum 5000 characters)" });
+    return;
+  }
+
+  if (subtaskDescription && subtaskDescription.length > 5000) {
+    res.status(400).json({ error: "Input 'subtaskDescription' is too long (maximum 5000 characters)" });
+    return;
+  }
+
+  if (deadlineTitle && deadlineTitle.length > 5000) {
+    res.status(400).json({ error: "Input 'deadlineTitle' is too long (maximum 5000 characters)" });
     return;
   }
 
@@ -553,7 +633,12 @@ app.post("/api/generate-learning", async (req, res) => {
       res.json(JSON.parse(text.trim()));
       return;
     } catch (error: any) {
-      console.warn(`Upstream Gemini attempt failed for generate-learning. Retries remaining: ${retries - 1}`, error);
+      const errorMsg = error.message || String(error);
+      if (errorMsg.includes("API key not valid") || errorMsg.includes("API_KEY_INVALID") || errorMsg.includes("INVALID_ARGUMENT") || errorMsg.includes("key is missing") || errorMsg.includes("required") || errorMsg.includes("variable is required")) {
+        console.info("[Gemini] API key is invalid or placeholder. Gracefully switching to fallback engine immediately for generate-learning.");
+        break;
+      }
+      console.info(`[Gemini] Model attempt failed for generate-learning. Retries remaining: ${retries - 1}. Status: ${errorMsg.substring(0, 100)}`);
       retries--;
       if (retries > 0) {
         await new Promise((resolve) => setTimeout(resolve, 800));
@@ -563,7 +648,340 @@ app.post("/api/generate-learning", async (req, res) => {
 
   console.info("Active Fallback Data Engine triggered for /api/generate-learning");
   res.json(fallbackGenerateLearning(subtaskTitle));
-});;
+});
+
+// Helper for Calendar Agent Fallback
+function fallbackCalendarAgent(subtasks: any[]) {
+  const allocations: { [key: string]: number } = {};
+  subtasks.forEach(task => {
+    const key = `${task.scheduleDay}-${task.timeBlock}`;
+    allocations[key] = (allocations[key] || 0) + 1;
+  });
+
+  const scheduledBlocks = subtasks.map(task => {
+    const key = `${task.scheduleDay}-${task.timeBlock}`;
+    const conflictDetected = allocations[key] > 1;
+
+    let suggestedTime = "09:00 AM – 11:00 AM";
+    if (task.timeBlock === "afternoon") {
+      suggestedTime = "02:00 PM – 04:00 PM";
+    } else if (task.timeBlock === "evening") {
+      suggestedTime = "07:00 PM – 09:00 PM";
+    }
+
+    return {
+      taskId: task.id || task.taskId,
+      suggestedTime,
+      conflictDetected,
+      conflictReason: conflictDetected 
+        ? `Overlapping allocation in the ${task.timeBlock} block on Day ${task.scheduleDay}.` 
+        : ""
+    };
+  });
+
+  return { scheduledBlocks };
+}
+
+// 3.5 Calendar Agent: Takes subtasks and suggests conflict-free scheduled slots
+app.post("/api/calendar-agent", async (req, res) => {
+  const { subtasks } = req.body;
+
+  if (!subtasks || !Array.isArray(subtasks)) {
+    res.status(400).json({ error: "Missing required field: subtasks" });
+    return;
+  }
+
+  for (const task of subtasks) {
+    if (task.title && task.title.length > 5000) {
+      res.status(400).json({ error: "One of the subtask titles is too long (maximum 5000 characters)" });
+      return;
+    }
+  }
+
+  let retries = 2;
+  while (retries > 0) {
+    try {
+      const ai = getGemini();
+
+      const prompt = `
+        You are the ultimate autonomous Calendar Agent (part of Deadline Guardian AI).
+        Analyze the following list of scheduled subtasks and detect any time-block conflicts (multiple tasks scheduled for the same timeBlock on the same scheduleDay).
+        Suggest precise, optimized 2-hour time slots (e.g. "09:00 AM – 11:00 AM", "02:00 PM – 04:00 PM", "07:00 PM – 09:00 PM") for each task to minimize friction.
+        
+        Subtasks to analyze:
+        ${JSON.stringify(subtasks, null, 2)}
+
+        Rules:
+        - Identify conflicts where scheduleDay and timeBlock overlap.
+        - For each subtask, return:
+          * taskId: mapping precisely back to the input task's id.
+          * suggestedTime: the proposed 2-hour slot.
+          * conflictDetected: true if another task is scheduled on the same day during the same block, false otherwise.
+          * conflictReason: a brief explanation of the conflict if detected, or an empty string.
+
+        Return ONLY a valid JSON object matching the required schema perfectly. Do not include markdown fences or explanation.
+      `;
+
+      const calendarSchema = {
+        type: Type.OBJECT,
+        properties: {
+          scheduledBlocks: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                taskId: { type: Type.STRING },
+                suggestedTime: { type: Type.STRING },
+                conflictDetected: { type: Type.BOOLEAN },
+                conflictReason: { type: Type.STRING }
+              },
+              required: ["taskId", "suggestedTime", "conflictDetected", "conflictReason"]
+            }
+          }
+        },
+        required: ["scheduledBlocks"]
+      };
+
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: calendarSchema,
+        }
+      });
+
+      const text = response.text;
+      if (!text) {
+        throw new Error("Empty response received from Gemini model.");
+      }
+
+      res.json(JSON.parse(text.trim()));
+      return;
+    } catch (error: any) {
+      const errorMsg = error.message || String(error);
+      if (errorMsg.includes("API key not valid") || errorMsg.includes("API_KEY_INVALID") || errorMsg.includes("INVALID_ARGUMENT") || errorMsg.includes("key is missing") || errorMsg.includes("required") || errorMsg.includes("variable is required")) {
+        console.info("[Gemini] API key is invalid or placeholder. Gracefully switching to fallback engine immediately for calendar-agent.");
+        break;
+      }
+      console.info(`[Gemini] Model attempt failed for calendar-agent. Retries remaining: ${retries - 1}. Status: ${errorMsg.substring(0, 100)}`);
+      retries--;
+      if (retries > 0) {
+        await new Promise((resolve) => setTimeout(resolve, 800));
+      }
+    }
+  }
+
+  console.info("Active Fallback Data Engine triggered for /api/calendar-agent");
+  res.json(fallbackCalendarAgent(subtasks));
+});
+
+// Helper for Recovery Fallback
+function fallbackRecoveryReschedule(subtasks: any[]) {
+  return subtasks.map((t, idx) => {
+    let action: 'keep' | 'defer' | 'drop' = 'keep';
+    let reason = 'Task is on critical path and must be completed.';
+    if (idx === subtasks.length - 1) {
+      action = 'defer';
+      reason = 'Deferring secondary milestone verification to free up urgent prep window.';
+    } else if (idx === subtasks.length - 2 && subtasks.length > 3) {
+      action = 'drop';
+      reason = 'Dropping non-critical reference review task to mitigate high workload.';
+    }
+    return { taskId: t.id || t.taskId, action, reason };
+  });
+}
+
+// Helper for Reflection Fallback
+function fallbackReflectionReview(completed: string[], missed: string[]) {
+  return {
+    summary: `Completed ${completed.length} tasks and missed/pending ${missed.length} tasks. Pacing is moderate, but requires consistent effort to avoid deadline slippage.`,
+    whatWorked: completed.length > 0 ? `Successfully tackled: "${completed.slice(0, 2).join('", "')}".` : 'Baseline schedule setup completed successfully.',
+    whatToAdjust: missed.length > 0 ? `Improve traction on: "${missed.slice(0, 2).join('", "')}".` : 'Keep buffer times for complex tasks.',
+    tomorrowFocus: missed.length > 0 ? `Focus on completing: "${missed[0]}".` : 'Begin study sessions for upcoming deliverables.'
+  };
+}
+
+// 4. Recovery Agent: Reschedules and decides keep/defer/drop actions
+app.post("/api/recovery-reschedule", async (req, res) => {
+  const { subtasks, riskScore } = req.body;
+
+  if (!subtasks || !Array.isArray(subtasks)) {
+    res.status(400).json({ error: "Missing required field: subtasks" });
+    return;
+  }
+
+  // Validate description/title lengths in subtasks array
+  for (const task of subtasks) {
+    if (task.title && task.title.length > 5000) {
+      res.status(400).json({ error: "One of the subtask titles is too long (maximum 5000 characters)" });
+      return;
+    }
+    if (task.description && task.description.length > 5000) {
+      res.status(400).json({ error: "One of the subtask descriptions is too long (maximum 5000 characters)" });
+      return;
+    }
+  }
+
+  let retries = 2;
+  while (retries > 0) {
+    try {
+      const ai = getGemini();
+
+      const prompt = `
+        You are the ultimate autonomous Recovery Agent (part of Deadline Guardian AI).
+        We have a deadline with a high fail risk of ${riskScore || 50}%.
+        Analyze the following list of subtasks and ruthlessly decide which ones to keep, defer, or drop in order to relieve scheduling congestion and ensure successful delivery of the core objectives.
+
+        Subtasks:
+        ${JSON.stringify(subtasks, null, 2)}
+
+        Rules:
+        - Decisively mark each task with one of these actions: "keep", "defer", or "drop".
+        - High priority or critical tasks should generally be "keep" unless absolutely necessary to drop or defer.
+        - Low or medium priority tasks, or secondary research/polishing tasks can be "defer" or "drop".
+        - Provide a realistic, concise reason for each task's action.
+
+        Return ONLY a valid JSON array matching the required schema perfectly. Do not include markdown fences or explanation.
+      `;
+
+      const recoverySchema = {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            taskId: { type: Type.STRING },
+            action: { type: Type.STRING, description: "Must be 'keep', 'defer', or 'drop'." },
+            reason: { type: Type.STRING }
+          },
+          required: ["taskId", "action", "reason"]
+        }
+      };
+
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: recoverySchema,
+        }
+      });
+
+      const text = response.text;
+      if (!text) {
+        throw new Error("Empty response received from Gemini model.");
+      }
+
+      res.json(JSON.parse(text.trim()));
+      return;
+    } catch (error: any) {
+      const errorMsg = error.message || String(error);
+      if (errorMsg.includes("API key not valid") || errorMsg.includes("API_KEY_INVALID") || errorMsg.includes("INVALID_ARGUMENT") || errorMsg.includes("key is missing") || errorMsg.includes("required") || errorMsg.includes("variable is required")) {
+        console.info("[Gemini] API key is invalid or placeholder. Gracefully switching to fallback engine immediately for recovery-reschedule.");
+        break;
+      }
+      console.info(`[Gemini] Model attempt failed for recovery-reschedule. Retries remaining: ${retries - 1}. Status: ${errorMsg.substring(0, 100)}`);
+      retries--;
+      if (retries > 0) {
+        await new Promise((resolve) => setTimeout(resolve, 800));
+      }
+    }
+  }
+
+  console.info("Active Fallback Data Engine triggered for /api/recovery-reschedule");
+  res.json(fallbackRecoveryReschedule(subtasks));
+});
+
+// 5. Reflection Agent: Generates retrospective performance reviews
+app.post("/api/reflection-review", async (req, res) => {
+  const { completedTasks, missedTasks } = req.body;
+
+  // Validate input lengths
+  if (completedTasks && Array.isArray(completedTasks)) {
+    for (const t of completedTasks) {
+      if (typeof t === "string" && t.length > 5000) {
+        res.status(400).json({ error: "One of the completed tasks is too long (maximum 5000 characters)" });
+        return;
+      }
+    }
+  }
+  if (missedTasks && Array.isArray(missedTasks)) {
+    for (const t of missedTasks) {
+      if (typeof t === "string" && t.length > 5000) {
+        res.status(400).json({ error: "One of the missed tasks is too long (maximum 5000 characters)" });
+        return;
+      }
+    }
+  }
+
+  let retries = 2;
+  while (retries > 0) {
+    try {
+      const ai = getGemini();
+
+      const prompt = `
+        You are the ultimate autonomous Reflection Agent (part of Deadline Guardian AI).
+        Perform a cognitive retrospective review of the user's completed and missed/pending tasks to generate a short, customized productivity retrospective.
+
+        Completed tasks:
+        ${JSON.stringify(completedTasks || [])}
+
+        Missed or Pending tasks:
+        ${JSON.stringify(missedTasks || [])}
+
+        Please formulate:
+        1. A high-level daily retrospective summary.
+        2. What worked well during today's schedule.
+        3. What to adjust in order to improve velocity and clear scheduling bottlenecks.
+        4. Focus areas and routine directives for tomorrow.
+
+        Return ONLY valid JSON matching the required schema perfectly. Do not include markdown fences or explanation.
+      `;
+
+      const reflectionSchema = {
+        type: Type.OBJECT,
+        properties: {
+          summary: { type: Type.STRING },
+          whatWorked: { type: Type.STRING },
+          whatToAdjust: { type: Type.STRING },
+          tomorrowFocus: { type: Type.STRING }
+        },
+        required: ["summary", "whatWorked", "whatToAdjust", "tomorrowFocus"]
+      };
+
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: reflectionSchema,
+        }
+      });
+
+      const text = response.text;
+      if (!text) {
+        throw new Error("Empty response received from Gemini model.");
+      }
+
+      res.json(JSON.parse(text.trim()));
+      return;
+    } catch (error: any) {
+      const errorMsg = error.message || String(error);
+      if (errorMsg.includes("API key not valid") || errorMsg.includes("API_KEY_INVALID") || errorMsg.includes("INVALID_ARGUMENT") || errorMsg.includes("key is missing") || errorMsg.includes("required") || errorMsg.includes("variable is required")) {
+        console.info("[Gemini] API key is invalid or placeholder. Gracefully switching to fallback engine immediately for reflection-review.");
+        break;
+      }
+      console.info(`[Gemini] Model attempt failed for reflection-review. Retries remaining: ${retries - 1}. Status: ${errorMsg.substring(0, 100)}`);
+      retries--;
+      if (retries > 0) {
+        await new Promise((resolve) => setTimeout(resolve, 800));
+      }
+    }
+  }
+
+  console.info("Active Fallback Data Engine triggered for /api/reflection-review");
+  res.json(fallbackReflectionReview(completedTasks || [], missedTasks || []));
+});
 
 // Serve SEO files
 app.get("/robots.txt", (req, res) => {

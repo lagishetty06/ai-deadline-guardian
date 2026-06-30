@@ -129,6 +129,7 @@ export default function App() {
   const [newCategory, setNewCategory] = useState<CategoryType>('project');
   const [newHoursPerDay, setNewHoursPerDay] = useState(4);
   const [newDescription, setNewDescription] = useState('');
+  const [formErrors, setFormErrors] = useState<{ title?: boolean; dueDate?: boolean; category?: boolean; hoursPerDay?: boolean }>({});
 
   // Active UI Controls
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -241,31 +242,35 @@ export default function App() {
     hoursPerDay: number,
     description: string
   ) => {
-    console.log("Deploy Guardian clicked");
+    console.log("Deploy Guardian clicked with inputs:", { title, dueDate, category, hoursPerDay, description });
 
     // Robust field-by-field validation
+    const errors: { title?: boolean; dueDate?: boolean; category?: boolean; hoursPerDay?: boolean } = {};
     if (!title || !title.trim()) {
-      console.warn("Validation failed: Title is missing");
-      addNotification("Validation Error: Goal Title is required.", "warning");
-      return;
+      errors.title = true;
+      console.warn("Validation failed: Goal Title is missing");
     }
     if (!dueDate) {
+      errors.dueDate = true;
       console.warn("Validation failed: Due Date is missing");
-      addNotification("Validation Error: Please select a Target Due Date.", "warning");
-      return;
     }
     if (!category) {
+      errors.category = true;
       console.warn("Validation failed: Category is missing");
-      addNotification("Validation Error: Goal Category is required.", "warning");
-      return;
     }
     if (!hoursPerDay || hoursPerDay <= 0) {
-      console.warn("Validation failed: Capacity is invalid");
-      addNotification("Validation Error: Daily Study Capacity must be at least 1 hour.", "warning");
+      errors.hoursPerDay = true;
+      console.warn("Validation failed: Daily Study Capacity is invalid");
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      addNotification("Validation Error: Please fill in all highlighted fields with valid data.", "warning");
       return;
     }
 
-    console.log("Validation passed");
+    setFormErrors({});
+    console.log("Validation passed successfully. Running pipeline...");
     setIsAnalyzing(true);
     setCurrentStep(1);
     addActivity(`Planner Agent initiated structural decomposition for "${title}"...`);
@@ -302,6 +307,50 @@ export default function App() {
       const parsedData = await response.json();
       console.log("API response received");
       
+      const initialSubtasks = (parsedData.subtasks || []).map((t: any, idx: number) => ({
+        id: `sub-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 9)}`,
+        title: t.title,
+        description: t.description || '',
+        effortHours: t.effortHours || 2,
+        priority: t.priority || 'medium',
+        category: t.category || 'general',
+        scheduleDay: t.scheduleDay || 1,
+        timeBlock: t.timeBlock || 'morning',
+        completed: false,
+        completedAt: null,
+        action: 'keep'
+      }));
+
+      addActivity(`Calendar Agent: Evaluating scheduling slots and blocking calendar tracks...`);
+      let finalizedSubtasks = [...initialSubtasks];
+      try {
+        const calResponse = await fetch('/api/calendar-agent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ subtasks: initialSubtasks })
+        });
+        if (calResponse.ok) {
+          const calData = await calResponse.json();
+          if (calData && Array.isArray(calData.scheduledBlocks)) {
+            finalizedSubtasks = initialSubtasks.map(task => {
+              const matchedBlock = calData.scheduledBlocks.find((b: any) => b.taskId === task.id);
+              if (matchedBlock) {
+                return {
+                  ...task,
+                  suggestedTime: matchedBlock.suggestedTime,
+                  conflictDetected: matchedBlock.conflictDetected,
+                  conflictReason: matchedBlock.conflictReason
+                };
+              }
+              return task;
+            });
+            addActivity(`Calendar Agent: Allotted optimal time blocks on calendar track successfully.`);
+          }
+        }
+      } catch (calErr) {
+        console.warn('Calendar Agent API failed, using fallback slots solver.', calErr);
+      }
+
       const newDeadline: Deadline = {
         id: `dl-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
         title,
@@ -313,19 +362,7 @@ export default function App() {
         riskScore: parsedData.riskScore || 40,
         riskLevel: (parsedData.riskLevel || 'safe') as RiskLevelType,
         status: 'active',
-        subtasks: (parsedData.subtasks || []).map((t: any, idx: number) => ({
-          id: `sub-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 9)}`,
-          title: t.title,
-          description: t.description || '',
-          effortHours: t.effortHours || 2,
-          priority: t.priority || 'medium',
-          category: t.category || 'general',
-          scheduleDay: t.scheduleDay || 1,
-          timeBlock: t.timeBlock || 'morning',
-          completed: false,
-          completedAt: null,
-          action: 'keep'
-        })),
+        subtasks: finalizedSubtasks,
         riskFactors: parsedData.riskFactors || [],
         recommendedAction: parsedData.recommendedAction || 'Follow daily coaching directives.',
         negotiation: parsedData.negotiation || null,
@@ -341,6 +378,7 @@ export default function App() {
       setNewTitle('');
       setNewDueDate('');
       setNewDescription('');
+      setFormErrors({});
 
       addActivity(`Multi-Agent sequence complete. Scheduled ${newDeadline.subtasks.length} subtasks with ${newDeadline.riskScore}% risk assessment.`);
       addNotification(`Guardian deployed successfully for "${title}"!`, 'success');
@@ -362,8 +400,8 @@ export default function App() {
         riskLevel: 'caution',
         status: 'active',
         subtasks: [
-          { id: `sub-${Date.now()}-1-${Math.random().toString(36).substring(2, 9)}`, title: 'Initial Milestone Planning & Setup', description: 'Lay down system properties and constraints.', effortHours: 2, priority: 'critical', category: 'planning', scheduleDay: 1, timeBlock: 'morning', completed: false, completedAt: null, action: 'keep' },
-          { id: `sub-${Date.now()}-2-${Math.random().toString(36).substring(2, 9)}`, title: 'Core Deliverable Drafting', description: 'Review prerequisites and structure draft layouts.', effortHours: 2, priority: 'high', category: 'building', scheduleDay: 1, timeBlock: 'afternoon', completed: false, completedAt: null, action: 'keep' }
+          { id: `sub-${Date.now()}-1-${Math.random().toString(36).substring(2, 9)}`, title: 'Initial Milestone Planning & Setup', description: 'Lay down system properties and constraints.', effortHours: 2, priority: 'critical', category: 'planning', scheduleDay: 1, timeBlock: 'morning', completed: false, completedAt: null, action: 'keep', suggestedTime: '09:00 AM – 11:00 AM', conflictDetected: false, conflictReason: '' },
+          { id: `sub-${Date.now()}-2-${Math.random().toString(36).substring(2, 9)}`, title: 'Core Deliverable Drafting', description: 'Review prerequisites and structure draft layouts.', effortHours: 2, priority: 'high', category: 'building', scheduleDay: 1, timeBlock: 'afternoon', completed: false, completedAt: null, action: 'keep', suggestedTime: '02:00 PM – 04:00 PM', conflictDetected: false, conflictReason: '' }
         ],
         riskFactors: ['Workload density is caution-rated.', 'Review gaps early to lower congestion.'],
         recommendedAction: 'Maintain current steady pacing. Tackle morning planning early.',
@@ -397,6 +435,7 @@ export default function App() {
       setSelectedId(fallbackDeadline.id);
       setNewTitle('');
       setNewDueDate('');
+      setFormErrors({});
     } finally {
       setIsAnalyzing(false);
     }
@@ -473,43 +512,107 @@ export default function App() {
   };
 
   // 4. Auto resolve schedule conflicts using our load balancer
-  const handleResolveConflicts = () => {
+  const handleResolveConflicts = async () => {
     if (!activeDeadline) return;
     
-    setDeadlines(prev => {
-      return prev.map(dl => {
-        if (dl.id !== selectedId) return dl;
-        
-        // Balanced scheduler logic: distribute overlapping/overloaded days
-        const updatedSubtasks = dl.subtasks.map((task, idx) => {
-          if (idx >= 3) {
+    addActivity(`Recovery Agent: Analyzing congestion for "${activeDeadline.title}"...`);
+    
+    try {
+      const response = await fetch('/api/recovery-reschedule', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subtasks: activeDeadline.subtasks,
+          riskScore: activeDeadline.riskScore
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Server error');
+      }
+
+      const decisions = await response.json();
+      
+      setDeadlines(prev => {
+        return prev.map(dl => {
+          if (dl.id !== selectedId) return dl;
+
+          const updatedSubtasks = dl.subtasks.map(task => {
+            const decision = decisions.find((d: any) => d.taskId === task.id);
+            if (decision) {
+              let scheduleDay = task.scheduleDay;
+              if (decision.action === 'defer') {
+                scheduleDay = Math.min(5, scheduleDay + 1);
+              }
+              return {
+                ...task,
+                action: decision.action,
+                scheduleDay,
+                description: decision.reason ? `${task.description} (Recovery: ${decision.reason})` : task.description
+              };
+            }
+            return task;
+          });
+
+          const resolvedRisk = Math.round(dl.riskScore * 0.65);
+          let riskLevel: RiskLevelType = 'safe';
+          if (resolvedRisk > 85) riskLevel = 'critical';
+          else if (resolvedRisk > 60) riskLevel = 'danger';
+          else if (resolvedRisk > 35) riskLevel = 'caution';
+
+          addActivity(`AI Load Balancer: Recovery Agent resolved schedule conflicts using autonomous pruning decisions.`);
+          addNotification('Recovery Agent rescheduled congestion successfully!', 'success');
+
+          return {
+            ...dl,
+            subtasks: updatedSubtasks,
+            riskScore: resolvedRisk,
+            riskLevel,
+            recommendedAction: `Congestion resolved by Recovery Agent. ${updatedSubtasks.filter(t => t.action === 'defer').length} tasks deferred, ${updatedSubtasks.filter(t => t.action === 'drop').length} dropped.`
+          };
+        });
+      });
+
+    } catch (err) {
+      console.warn('Recovery Agent API failed, running fallback scheduler logic.', err);
+      setDeadlines(prev => {
+        return prev.map(dl => {
+          if (dl.id !== selectedId) return dl;
+          
+          const updatedSubtasks = dl.subtasks.map((task, idx) => {
+            let action: 'keep' | 'defer' | 'drop' = 'keep';
+            let scheduleDay = task.scheduleDay;
+            if (idx >= 3) {
+              action = 'defer';
+              scheduleDay = Math.min(5, scheduleDay + 1);
+            }
             return {
               ...task,
-              scheduleDay: Math.min(5, task.scheduleDay + 1),
+              action,
+              scheduleDay,
               timeBlock: (idx % 2 === 0 ? 'morning' : 'afternoon') as any
             };
-          }
-          return task;
+          });
+
+          const resolvedRisk = Math.round(dl.riskScore * 0.70);
+          let riskLevel: RiskLevelType = 'safe';
+          if (resolvedRisk > 85) riskLevel = 'critical';
+          else if (resolvedRisk > 60) riskLevel = 'danger';
+          else if (resolvedRisk > 35) riskLevel = 'caution';
+
+          addActivity('AI Load Balancer: Density conflicts resolved using fallback schedule distribution.');
+          addNotification('Schedule load-balanced successfully!', 'success');
+
+          return {
+            ...dl,
+            subtasks: updatedSubtasks,
+            riskScore: resolvedRisk,
+            riskLevel,
+            recommendedAction: 'Daily tasks redistributed. Congestion cleared! Proceed with today\'s load balanced schedule.'
+          };
         });
-
-        const resolvedRisk = Math.round(dl.riskScore * 0.70);
-        let riskLevel: RiskLevelType = 'safe';
-        if (resolvedRisk > 85) riskLevel = 'critical';
-        else if (resolvedRisk > 60) riskLevel = 'danger';
-        else if (resolvedRisk > 35) riskLevel = 'caution';
-
-        addActivity('AI Load Balancer: Density conflicts analyzed. Tasks distributed over Days 2 & 3.');
-        addNotification('Schedule load-balanced successfully!', 'success');
-
-        return {
-          ...dl,
-          subtasks: updatedSubtasks,
-          riskScore: resolvedRisk,
-          riskLevel,
-          recommendedAction: 'Daily tasks redistributed. Congestion cleared! Proceed with today\'s load balanced schedule.'
-        };
       });
-    });
+    }
 
     setSimulatedRiskOverride(null);
     setSimulatedLevelOverride(null);
@@ -637,14 +740,23 @@ export default function App() {
                       <input
                         id="goal-title-empty"
                         type="text"
-                        className="w-full bg-black/40 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
+                        className={`w-full bg-black/40 border ${formErrors.title ? 'border-rose-500/80 ring-1 ring-rose-500/50' : 'border-slate-800'} rounded-xl px-3 py-2 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-1 ${formErrors.title ? 'focus:ring-rose-500' : 'focus:ring-indigo-500'} transition-all`}
                         placeholder="e.g. Capstone Presentation or Math Final"
                         value={newTitle}
-                        onChange={(e) => setNewTitle(e.target.value)}
+                        onChange={(e) => {
+                          setNewTitle(e.target.value);
+                          if (formErrors.title) setFormErrors(prev => ({ ...prev, title: false }));
+                        }}
                       />
                     </div>
-                    <VoiceInput onTranscriptChange={(text) => setNewTitle(text)} />
+                    <VoiceInput onTranscriptChange={(text) => {
+                      setNewTitle(text);
+                      if (formErrors.title) setFormErrors(prev => ({ ...prev, title: false }));
+                    }} />
                   </div>
+                  {formErrors.title && (
+                    <p className="text-[10px] text-rose-400 font-mono mt-0.5">Please provide a valid goal title.</p>
+                  )}
 
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
@@ -652,19 +764,28 @@ export default function App() {
                       <input
                         id="due-date-empty"
                         type="date"
-                        className="w-full bg-black/40 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                        className={`w-full bg-black/40 border ${formErrors.dueDate ? 'border-rose-500/80 ring-1 ring-rose-500/50' : 'border-slate-800'} rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:ring-1 ${formErrors.dueDate ? 'focus:ring-rose-500' : 'focus:ring-indigo-500'} font-mono`}
                         value={newDueDate}
-                        onChange={(e) => setNewDueDate(e.target.value)}
+                        onChange={(e) => {
+                          setNewDueDate(e.target.value);
+                          if (formErrors.dueDate) setFormErrors(prev => ({ ...prev, dueDate: false }));
+                        }}
                       />
+                      {formErrors.dueDate && (
+                        <p className="text-[9px] text-rose-400 font-mono mt-0.5">Select a valid due date.</p>
+                      )}
                     </div>
 
                     <div className="space-y-1">
                       <label htmlFor="category-empty" className="text-[9px] font-mono text-slate-500 uppercase tracking-wider block">Category</label>
                       <select
                         id="category-empty"
-                        className="w-full bg-black/40 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        className={`w-full bg-black/40 border ${formErrors.category ? 'border-rose-500/80 ring-1 ring-rose-500/50' : 'border-slate-800'} rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:ring-1 ${formErrors.category ? 'focus:ring-rose-500' : 'focus:ring-indigo-500'}`}
                         value={newCategory}
-                        onChange={(e) => setNewCategory(e.target.value as CategoryType)}
+                        onChange={(e) => {
+                          setNewCategory(e.target.value as CategoryType);
+                          if (formErrors.category) setFormErrors(prev => ({ ...prev, category: false }));
+                        }}
                       >
                         <option value="exam">Exam Study</option>
                         <option value="project">Project Deliverable</option>
@@ -672,6 +793,9 @@ export default function App() {
                         <option value="assignment">Homework Assignment</option>
                         <option value="work">Work Statement</option>
                       </select>
+                      {formErrors.category && (
+                        <p className="text-[9px] text-rose-400 font-mono mt-0.5">Select a category.</p>
+                      )}
                     </div>
                   </div>
 
@@ -826,14 +950,23 @@ export default function App() {
                       <input
                         id="goal-title-workspace"
                         type="text"
-                        className="w-full bg-black/40 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all font-sans"
+                        className={`w-full bg-black/40 border ${formErrors.title ? 'border-rose-500/80 ring-1 ring-rose-500/50' : 'border-slate-800'} rounded-xl px-3 py-2 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-1 ${formErrors.title ? 'focus:ring-rose-500' : 'focus:ring-indigo-500'} transition-all font-sans`}
                         placeholder="e.g. DBMS Normalization Midterm or Capstone Submit"
                         value={newTitle}
-                        onChange={(e) => setNewTitle(e.target.value)}
+                        onChange={(e) => {
+                          setNewTitle(e.target.value);
+                          if (formErrors.title) setFormErrors(prev => ({ ...prev, title: false }));
+                        }}
                       />
                     </div>
-                    <VoiceInput onTranscriptChange={(text) => setNewTitle(text)} />
+                    <VoiceInput onTranscriptChange={(text) => {
+                      setNewTitle(text);
+                      if (formErrors.title) setFormErrors(prev => ({ ...prev, title: false }));
+                    }} />
                   </div>
+                  {formErrors.title && (
+                    <p className="text-[10px] text-rose-400 font-mono mt-0.5">Please provide a valid goal title.</p>
+                  )}
 
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
@@ -841,19 +974,28 @@ export default function App() {
                       <input
                         id="due-date-workspace"
                         type="date"
-                        className="w-full bg-black/40 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all font-mono"
+                        className={`w-full bg-black/40 border ${formErrors.dueDate ? 'border-rose-500/80 ring-1 ring-rose-500/50' : 'border-slate-800'} rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:ring-1 ${formErrors.dueDate ? 'focus:ring-rose-500' : 'focus:ring-indigo-500'} transition-all font-mono`}
                         value={newDueDate}
-                        onChange={(e) => setNewDueDate(e.target.value)}
+                        onChange={(e) => {
+                          setNewDueDate(e.target.value);
+                          if (formErrors.dueDate) setFormErrors(prev => ({ ...prev, dueDate: false }));
+                        }}
                       />
+                      {formErrors.dueDate && (
+                        <p className="text-[9px] text-rose-400 font-mono mt-0.5">Select a due date.</p>
+                      )}
                     </div>
 
                     <div className="space-y-1">
                       <label htmlFor="category-workspace" className="text-[10px] font-mono text-slate-500 uppercase tracking-wider">Goal Category</label>
                       <select
                         id="category-workspace"
-                        className="w-full bg-black/40 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
+                        className={`w-full bg-black/40 border ${formErrors.category ? 'border-rose-500/80 ring-1 ring-rose-500/50' : 'border-slate-800'} rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:ring-1 ${formErrors.category ? 'focus:ring-rose-500' : 'focus:ring-indigo-500'} transition-all`}
                         value={newCategory}
-                        onChange={(e) => setNewCategory(e.target.value as CategoryType)}
+                        onChange={(e) => {
+                          setNewCategory(e.target.value as CategoryType);
+                          if (formErrors.category) setFormErrors(prev => ({ ...prev, category: false }));
+                        }}
                       >
                         <option value="exam">Exam Study</option>
                         <option value="project">Project Deliverable</option>
@@ -862,6 +1004,9 @@ export default function App() {
                         <option value="work">Work Statement</option>
                         <option value="research">Thesis Research</option>
                       </select>
+                      {formErrors.category && (
+                        <p className="text-[9px] text-rose-400 font-mono mt-0.5">Select a category.</p>
+                      )}
                     </div>
                   </div>
 
@@ -873,14 +1018,23 @@ export default function App() {
                         type="number"
                         min="1"
                         max="12"
-                        className="w-full bg-black/40 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all font-mono"
+                        className={`w-full bg-black/40 border ${formErrors.hoursPerDay ? 'border-rose-500/80 ring-1 ring-rose-500/50' : 'border-slate-800'} rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:ring-1 ${formErrors.hoursPerDay ? 'focus:ring-rose-500' : 'focus:ring-indigo-500'} transition-all font-mono`}
                         value={newHoursPerDay}
-                        onChange={(e) => setNewHoursPerDay(Number(e.target.value))}
+                        onChange={(e) => {
+                          setNewHoursPerDay(Number(e.target.value));
+                          if (formErrors.hoursPerDay) setFormErrors(prev => ({ ...prev, hoursPerDay: false }));
+                        }}
                       />
+                      {formErrors.hoursPerDay && (
+                        <p className="text-[9px] text-rose-400 font-mono mt-0.5">Enter a valid capacity.</p>
+                      )}
                     </div>
                     <div className="flex items-end">
                       <button
-                        onClick={() => handleCreateDeadline(newTitle, newDueDate, newCategory, newHoursPerDay, newDescription)}
+                        onClick={() => {
+                          console.log("Workspace form Deploy Guardian clicked directly! Inputs:", { newTitle, newDueDate, newCategory, newHoursPerDay, newDescription });
+                          handleCreateDeadline(newTitle, newDueDate, newCategory, newHoursPerDay, newDescription);
+                        }}
                         disabled={isAnalyzing}
                         aria-label="Deploy Guardian Goal Profile"
                         className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800/80 text-white font-medium text-xs py-2 px-4 rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-indigo-600/15"
@@ -1208,8 +1362,14 @@ export default function App() {
 
                         <div className="space-y-1 flex-1 pr-2">
                           <div className="flex justify-between items-center">
-                            <h4 className={`text-xs font-semibold leading-normal ${task.completed ? 'line-through text-slate-500' : 'text-slate-200'}`}>
+                            <h4 className={`text-xs font-semibold leading-normal ${task.completed ? 'line-through text-slate-500' : 'text-slate-200'} flex items-center gap-1.5`}>
                               {task.title}
+                              {task.action === 'defer' && (
+                                <span className="text-[8px] font-mono font-bold uppercase tracking-wider bg-amber-500/10 text-amber-400 border border-amber-500/20 px-1.5 py-0.5 rounded-full">Deferred</span>
+                              )}
+                              {task.action === 'drop' && (
+                                <span className="text-[8px] font-mono font-bold uppercase tracking-wider bg-rose-500/10 text-rose-400 border border-rose-500/20 px-1.5 py-0.5 rounded-full">Dropped</span>
+                              )}
                             </h4>
                             <span className={`text-[8px] font-mono font-bold uppercase tracking-wider shrink-0 px-1.5 rounded-full ${
                               task.priority === 'critical' ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-slate-800 text-slate-400'
@@ -1219,10 +1379,22 @@ export default function App() {
                           </div>
                           <p className="text-[10px] text-slate-500 leading-normal">{task.description}</p>
                           
-                          <div className="flex gap-2.5 pt-1 text-[9px] font-mono text-slate-500">
+                          <div className="flex flex-wrap items-center gap-2 pt-1 text-[9px] font-mono text-slate-500">
                             <span>{task.effortHours} hrs</span>
                             <span>•</span>
                             <span className="capitalize">{task.timeBlock} Block</span>
+                            {task.suggestedTime && (
+                              <>
+                                <span>•</span>
+                                <span className="text-indigo-400 font-medium">Slot: {task.suggestedTime}</span>
+                              </>
+                            )}
+                            {task.conflictDetected && (
+                              <>
+                                <span>•</span>
+                                <span className="text-amber-500 font-semibold" title={task.conflictReason || "Multiple tasks planned for this block!"}>⚠️ Conflict</span>
+                              </>
+                            )}
                             <span>•</span>
                             <button
                               onClick={() => setSelectedSubtask(task)}

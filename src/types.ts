@@ -31,6 +31,9 @@ export interface Subtask {
   completed: boolean;
   completedAt: string | null;
   action: SubtaskActionType;
+  suggestedTime?: string;
+  conflictDetected?: boolean;
+  conflictReason?: string;
 }
 
 export interface Deadline {

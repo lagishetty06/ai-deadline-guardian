@@ -65,11 +65,10 @@ graph TD
 
 Deadline Guardian AI showcases a robust full-stack implementation utilizing Google’s premier cloud and developer technologies:
 
-- **♊ Gemini 1.5 & 3.5-Flash**: Orchestrates high-speed reasoning loops, structured JSON schemas, and on-demand learning curricula.
+- **♊ Gemini 2.5-Flash**: Orchestrates high-speed reasoning loops, structured JSON schemas, and on-demand learning curricula.
 - **🚀 Google AI Studio**: Accelerates prompt engineering and rapid prototyping of individual agent behaviors.
-- **📦 Firebase & Cloud Firestore**: Provides persistent, zero-latency state synchronization for user profiles, active deadlines, and completed subtasks.
-- **🔐 Google Authentication**: Enables secure, multi-device authorization for student study accounts.
-- **📅 Google Calendar API**: Pushes agent-approved, conflict-free time blocks directly to users' personal schedules.
+- **📦 Client-Side State Management**: Restores and persists user profiles, active deadlines, and completed subtasks securely using browser `localStorage` for responsive offline performance.
+- **📅 Visual Calendar Block Out**: Surfaces conflict-free time slots and custom daily study energy distributions directly in the dashboard UI.
 - **☁️ Cloud Run (Google Cloud)**: Packages and serves the full-stack container, scaling to zero on idle for maximum cost efficiency.
 
 ---
