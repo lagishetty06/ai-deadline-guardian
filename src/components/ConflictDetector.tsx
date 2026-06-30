@@ -1,13 +1,14 @@
 import React from 'react';
-import { CalendarRange, AlertTriangle, CheckCircle2, Shuffle, Sparkles } from 'lucide-react';
+import { CalendarRange, AlertTriangle, CheckCircle2, Shuffle, Sparkles, Loader2 } from 'lucide-react';
 import { Deadline, Subtask } from '../types';
 
 interface ConflictDetectorProps {
   deadlines: Deadline[];
   onAutoResolve: () => void;
+  isLoadBalancing?: boolean;
 }
 
-export default function ConflictDetector({ deadlines, onAutoResolve }: ConflictDetectorProps) {
+export default function ConflictDetector({ deadlines, onAutoResolve, isLoadBalancing = false }: ConflictDetectorProps) {
   // Aggregate tasks by schedule day to check for overload and overlaps
   const dailyAllocations: { [dayNum: number]: { tasks: { taskTitle: string; deadlineTitle: string; hours: number; timeBlock: string }[]; totalHours: number } } = {};
   
@@ -100,10 +101,22 @@ export default function ConflictDetector({ deadlines, onAutoResolve }: ConflictD
 
           <button
             onClick={onAutoResolve}
-            className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs py-2 px-4 rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-indigo-600/15"
+            disabled={isLoadBalancing}
+            className={`w-full text-white font-medium text-xs py-2 px-4 rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-indigo-600/15 ${
+              isLoadBalancing ? 'bg-indigo-600/50 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-500'
+            }`}
           >
-            <Sparkles className="w-4 h-4 text-amber-300" />
-            AI Load-Balance Schedule
+            {isLoadBalancing ? (
+              <>
+                <Loader2 className="w-4 h-4 text-amber-300 animate-spin" />
+                AI Load-Balancing...
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4 text-amber-300" />
+                AI Load-Balance Schedule
+              </>
+            )}
           </button>
         </div>
       )}

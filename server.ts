@@ -17,6 +17,12 @@ const RATE_LIMIT_TOKENS = 10;
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 
 function rateLimiter(req: any, res: any, next: any) {
+  // Relax/bypass rate limiter in development mode
+  if (process.env.NODE_ENV !== "production") {
+    next();
+    return;
+  }
+
   const ip = (req.headers["x-forwarded-for"] as string) || req.socket.remoteAddress || "unknown";
   const now = Date.now();
 
@@ -158,7 +164,7 @@ function fallbackAnalyzeGoal(title: string, dueDate: string, category: string, h
       ? `Workload is critical. Postpone secondary tasks immediately, or use the Negotiation Agent below to request a timeline extension.`
       : `Pacing is healthy. Review core flashcards on schedule and complete subtasks daily.`,
     dailyCoach: {
-      greeting: `Hey Sai Charan, let's keep our eyes on the target: "${title}".`,
+      greeting: `Let's keep our eyes on the target: "${title}".`,
       focusMessage: `Today focuses on building baseline structures and reviewing high-yield core concepts.`,
       timeBlocks: [
         {
@@ -191,7 +197,7 @@ This additional buffer would allow us to refine the quality of our implementatio
 Thank you so much for your understanding, guidance, and ongoing support.
 
 Sincerely,
-Sai Charan`,
+Lead Developer`,
       tone: "semi-formal",
       deferSuggestions: [
         {
